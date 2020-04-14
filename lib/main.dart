@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_blue/flutter_blue.dart';
+import 'package:location/location.dart';
 
 void main() => runApp(MyApp());
 
@@ -7,20 +9,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'BLE Scanner',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
-        primarySwatch: Colors.blue,
+        primarySwatch: Colors.teal,
       ),
-      home: MyHomePage(title: 'Flutter Demo Home Page'),
+      home: MyHomePage(title: 'BLE Scanner'),
     );
   }
 }
@@ -44,68 +37,144 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  List<ScanResult> results = [];
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+  BluetoothDevice device;
+  BluetoothState state;
+  BluetoothDeviceState deviceState;
+  Future<bool> locationServiceEnabled;
+  PermissionStatus permissionGranted;
+  LocationData locationData;
+
+  void _showDialog(String message) {
+    // flutter defined function
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        // return object of type Dialog
+        return AlertDialog(
+          title: new Text("Bluetooth"),
+          content: new Text(message),
+          actions: <Widget>[
+            new FlatButton(
+              child: new Text("Close"),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
+
+  Widget getBLEList(results) {
+    return Container(
+      height: 300.0, // Change as per your requirement
+      width: 300.0, // Change as per your requirement
+      child: new ListView.builder(
+        shrinkWrap: true,
+        itemCount: results.length,
+        itemBuilder: (BuildContext context, int index) {
+          return new Text(
+              '${results[index].device.id}.. rssi: ${results[index].rssi}');
+        },
+      ),
+    );
+  }
+
+  void _showListDialog(results) {
+    // flutter defined function
+    if (results.length > 0) {
+      showDialog(
+        context: context,
+        builder: (BuildContext context) {
+          // return object of type Dialog
+          return AlertDialog(
+            title: new Text("BLE device list"),
+            content: getBLEList(results),
+            actions: <Widget>[
+              new FlatButton(
+                child: new Text("Close"),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          );
+        },
+      );
+    }
+  }
+
+  void initState() {
+    super.initState();
+    Location location = new Location();
+    locationServiceEnabled = location.serviceEnabled();
+
+    if (locationServiceEnabled == null) {
+      _showDialog('Please switch on your GPS');
+    }
+
+    List<ScanResult> resultsList = [];
+    FlutterBlue flutterBlue = FlutterBlue.instance;
+    flutterBlue.startScan(timeout: Duration(seconds: 4));
+
+    flutterBlue.state.listen((state) {
+      if (state == BluetoothState.off) {
+        _showDialog('Please switch on your bluetooth.');
+      } else if (state == BluetoothState.on) {
+        flutterBlue.scanResults.listen((results) {
+          for (ScanResult r in results) {
+            resultsList.add(r);
+          }
+        });
+        setState(() {
+          results = resultsList;
+        });
+
+        //_showListDialog(resultsList);
+      }
+    });
+
+    flutterBlue.stopScan();
+  }
+
+  void scanForDevices() async {}
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
       ),
       body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
             Text(
-              'You have pushed the button this many times:',
+              'Device list:',
             ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.display1,
-            ),
+            Container(
+              height: 300.0, // Change as per your requirement
+              width: 300.0, // Change as per your requirement
+              child: new ListView.builder(
+                shrinkWrap: true,
+                itemCount: results.length,
+                itemBuilder: (BuildContext context, int index) {
+                  return new Text(
+                      '${results[index].device.id}.. rssi: ${results[index].rssi}');
+                },
+              ),
+            )
           ],
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
+        onPressed: null,
         tooltip: 'Increment',
         child: Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
+      ),
     );
   }
 }
