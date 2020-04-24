@@ -1,6 +1,9 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:location/location.dart';
+import 'package:sensors/sensors.dart';
 
 void main() => runApp(MyApp());
 
@@ -36,6 +39,13 @@ class MyHomePage extends StatefulWidget {
   _MyHomePageState createState() => _MyHomePageState();
 }
 
+extension Precision on num {
+  num toPrecision(int fractionDigits) {
+    num mod = pow(10, fractionDigits.toDouble());
+    return ((this * mod).round().toDouble() / mod);
+  }
+}
+
 class _MyHomePageState extends State<MyHomePage> {
   List<ScanResult> results = [];
 
@@ -68,79 +78,72 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 
-  Widget getBLEList(results) {
-    return Container(
-      height: 300.0, // Change as per your requirement
-      width: 300.0, // Change as per your requirement
-      child: new ListView.builder(
-        shrinkWrap: true,
-        itemCount: results.length,
-        itemBuilder: (BuildContext context, int index) {
-          return new Text(
-              '${results[index].device.id}.. rssi: ${results[index].rssi}');
-        },
-      ),
-    );
-  }
+  num Function(num) distance = (data) {
+    return pow(10, ((-69 - (data)) / 100)).toPrecision(3);
+  };
 
-  void _showListDialog(results) {
-    // flutter defined function
-    if (results.length > 0) {
-      showDialog(
-        context: context,
-        builder: (BuildContext context) {
-          // return object of type Dialog
-          return AlertDialog(
-            title: new Text("BLE device list"),
-            content: getBLEList(results),
-            actions: <Widget>[
-              new FlatButton(
-                child: new Text("Close"),
-                onPressed: () {
-                  Navigator.of(context).pop();
-                },
-              ),
-            ],
-          );
-        },
-      );
-    }
+  void scanDevices(flutterBlue) async {
+    List<ScanResult> resultsList = [];
+
+    flutterBlue.startScan(timeout: Duration(seconds: 4));
+
+    flutterBlue.scanResults.listen((results) {
+      for (ScanResult r in results) {
+        var isUnique = true;
+        for (var i = 0; i < resultsList.length; i++) {
+          if (resultsList[i].device.id == r.device.id) {
+            isUnique = false;
+          }
+        }
+        if (isUnique) {
+          resultsList.add(r);
+        }
+      }
+    });
+    setState(() {
+      results = resultsList;
+    });
   }
 
   void initState() {
     super.initState();
     Location location = new Location();
     locationServiceEnabled = location.serviceEnabled();
+    FlutterBlue flutterBlue = FlutterBlue.instance;
+    var scanSubscription;
 
     if (locationServiceEnabled == null) {
       _showDialog('Please switch on your GPS');
     }
 
-    List<ScanResult> resultsList = [];
-    FlutterBlue flutterBlue = FlutterBlue.instance;
-    flutterBlue.startScan(timeout: Duration(seconds: 4));
+    num lastX = 0;
+    num lastY = 0;
 
     flutterBlue.state.listen((state) {
       if (state == BluetoothState.off) {
         _showDialog('Please switch on your bluetooth.');
       } else if (state == BluetoothState.on) {
-        flutterBlue.scanResults.listen((results) {
-          for (ScanResult r in results) {
-            resultsList.add(r);
-          }
-        });
-        setState(() {
-          results = resultsList;
-        });
-
-        //_showListDialog(resultsList);
+        scanDevices(flutterBlue);
       }
+    });
+
+    accelerometerEvents.listen((AccelerometerEvent event) {
+      num diffX = event.x - lastX;
+      num diffY = event.y - lastY;
+
+      if (diffX > 1 || diffY > 1) {
+        // device moved
+        flutterBlue.stopScan();
+        scanSubscription.cancel();
+        flutterBlue.startScan(timeout: Duration(seconds: 4));
+      }
+
+      lastX = event.x;
+      lastY = event.y;
     });
 
     flutterBlue.stopScan();
   }
-
-  void scanForDevices() async {}
 
   @override
   Widget build(BuildContext context) {
@@ -156,24 +159,20 @@ class _MyHomePageState extends State<MyHomePage> {
               'Device list:',
             ),
             Container(
-              height: 300.0, // Change as per your requirement
-              width: 300.0, // Change as per your requirement
+              height: 600.0, // Change as per your requirement
+              width: 500.0, // Change as per your requirement
               child: new ListView.builder(
                 shrinkWrap: true,
                 itemCount: results.length,
                 itemBuilder: (BuildContext context, int index) {
                   return new Text(
-                      '${results[index].device.id}.. rssi: ${results[index].rssi}');
+                      '${results[index].device.name}.. rssi: ${results[index]
+                          .rssi} distance: ${distance(results[index].rssi)}');
                 },
               ),
             )
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: null,
-        tooltip: 'Increment',
-        child: Icon(Icons.add),
       ),
     );
   }
