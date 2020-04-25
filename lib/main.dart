@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:location/location.dart';
+import 'package:sensors/sensors.dart';
+import 'package:just_debounce_it/just_debounce_it.dart';
+
+import 'ble-utils.dart';
 
 void main() => runApp(MyApp());
 
@@ -9,11 +13,11 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'BLE Scanner',
+      title: 'Bluetooth Low Energy Scanner',
       theme: ThemeData(
-        primarySwatch: Colors.teal,
+        primarySwatch: Colors.blue,
       ),
-      home: MyHomePage(title: 'BLE Scanner'),
+      home: MyHomePage(title: 'Bluetooth Low Energy Scanner'),
     );
   }
 }
@@ -36,6 +40,8 @@ class MyHomePage extends StatefulWidget {
   _MyHomePageState createState() => _MyHomePageState();
 }
 
+
+
 class _MyHomePageState extends State<MyHomePage> {
   List<ScanResult> results = [];
 
@@ -45,6 +51,7 @@ class _MyHomePageState extends State<MyHomePage> {
   Future<bool> locationServiceEnabled;
   PermissionStatus permissionGranted;
   LocationData locationData;
+
 
   void _showDialog(String message) {
     // flutter defined function
@@ -70,14 +77,14 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Widget getBLEList(results) {
     return Container(
-      height: 300.0, // Change as per your requirement
-      width: 300.0, // Change as per your requirement
+      height: 300.0,
+      width: 400.0,
       child: new ListView.builder(
         shrinkWrap: true,
         itemCount: results.length,
         itemBuilder: (BuildContext context, int index) {
           return new Text(
-              '${results[index].device.id}.. rssi: ${results[index].rssi}');
+              '${results[index].device.id}.. rssi: ${results[index].rssi} ');
         },
       ),
     );
@@ -119,31 +126,80 @@ class _MyHomePageState extends State<MyHomePage> {
     List<ScanResult> resultsList = [];
     FlutterBlue flutterBlue = FlutterBlue.instance;
     flutterBlue.startScan(timeout: Duration(seconds: 4));
+    var scanSubScription = null;
+
+    stopExistingScan() {
+     // scanSubScription?.cancel();
+      flutterBlue.stopScan();
+      //scanSubScription = null;
+
+    }
+
+    num lastX = 0;
+    num lastY = 0;
+
+    accelerometerEvents.listen((AccelerometerEvent event) async {
+      // check the delta
+      num diffX = event.x - lastX;
+      num diffY = event.y - lastY;
+
+      // setting some threshold value so that it detects considerable amount of movement
+      num thresholdX = 2;
+      num thresholdY = 2;
+
+      if( diffX > thresholdX || diffY > thresholdY){
+
+        // device moved
+        //stopExistingScan();
+        await Future.delayed(Duration(seconds:5), (){
+          flutterBlue.stopScan();
+          flutterBlue.startScan(timeout: Duration(seconds: 4));
+          });
+      }
+
+      lastX = event.x;
+      lastY = event.y;
+    });
 
     flutterBlue.state.listen((state) {
       if (state == BluetoothState.off) {
         _showDialog('Please switch on your bluetooth.');
+
       } else if (state == BluetoothState.on) {
         flutterBlue.scanResults.listen((results) {
           for (ScanResult r in results) {
-            resultsList.add(r);
+            String nameStr = r.device.name;
+
+            if(nameStr.toUpperCase() == 'TCZ' ) {
+             var isUnique = true;
+              for( var i = 0 ; i < resultsList.length; i++ ) {
+                if(resultsList[i].device.id == r.device.id ) {
+                  isUnique = false;
+                }
+              }
+
+              if(isUnique){
+                resultsList.add(r);
+              }
+            }
           }
+
         });
+
         setState(() {
           results = resultsList;
         });
-
-        //_showListDialog(resultsList);
       }
     });
 
-    flutterBlue.stopScan();
+
   }
 
   void scanForDevices() async {}
 
   @override
   Widget build(BuildContext context) {
+    print("===========");
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.title),
@@ -156,14 +212,14 @@ class _MyHomePageState extends State<MyHomePage> {
               'Device list:',
             ),
             Container(
-              height: 300.0, // Change as per your requirement
-              width: 300.0, // Change as per your requirement
+              height: 80.0,
+              width: 300.0,
               child: new ListView.builder(
                 shrinkWrap: true,
                 itemCount: results.length,
                 itemBuilder: (BuildContext context, int index) {
                   return new Text(
-                      '${results[index].device.id}.. rssi: ${results[index].rssi}');
+                      '${results[index].device.id}.. rssi: ${results[index].rssi} distance: ${getDistanceByRSSI(results[index].rssi)}');
                 },
               ),
             )

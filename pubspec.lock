@@ -114,6 +114,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "0.6.1+1"
+  just_debounce_it:
+    dependency: "direct main"
+    description:
+      name: just_debounce_it
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "3.0.0+2"
   location:
     dependency: "direct main"
     description:
@@ -198,6 +205,13 @@ packages:
       url: "https://pub.dartlang.org"
     source: hosted
     version: "0.23.1"
+  sensors:
+    dependency: "direct main"
+    description:
+      name: sensors
+      url: "https://pub.dartlang.org"
+    source: hosted
+    version: "0.4.2"
   sky_engine:
     dependency: transitive
     description: flutter
